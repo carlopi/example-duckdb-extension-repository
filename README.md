@@ -5,7 +5,7 @@ A demo DuckDB extension repository, served by GitHub Pages at
 
 - `.well-known/duckdb-extension-repo.json`: the repository's metadata, with the public key that signs its extensions.
 - `<version>/<platform>/<name>.duckdb_extension.gz`: the extensions, laid out as DuckDB expects: `inet` for v2.0.0 and
-  `autocomplete` for the development build db722816b1 of the branch implementing `CREATE EXTENSION REPOSITORY <host>`.
+  `inet`, `autocomplete` and `httpfs` for the development build c323c78907 of the branch implementing `CREATE EXTENSION REPOSITORY <host>`.
 - `scripts/sign-extension.sh`: signs an extension with the repository's private key (kept outside this repo) and
   places it.
 
