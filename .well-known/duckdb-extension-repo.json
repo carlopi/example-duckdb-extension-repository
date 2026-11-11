@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "repository_url": "https://carlopi.github.io/example-duckdb-extension-repository",
+  "signature_keys": [
+    "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqhF8aCpaP4uVwtkXgoLz\nTeBESnTnEpNxFwun/vXNv6bm3m6fu+C+iwCaZQQalnBJM3lyd3S5VCoedymaXi2C\nAMU0fjOGFpGRWoLgw7zI1SV0IkOpASdJYG2c7DHXkY8ZxWcVDotnYOgYKv+AmyxH\n7NUCA6l5IvsCBAawc1RvjgCEBoiqxWCTxsvGQPhjXAwJqh7BUDsGw4VBQ+QgmIcW\nToJRlVtIKvrWBsZDWnWlz2BZqK1Z9DLuOVnvE5FpM6cIVaebgLSvNals932uqb1y\nMJMYH+URhIe05kN4mnftyaM9qBYaA7anEa2ft3yYD+1VI/jfiknnajPmzzfMiQOh\nMwIDAQAB\n-----END PUBLIC KEY-----"
+  ]
+}
