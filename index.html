@@ -48,7 +48,19 @@ MwIDAQAB
 <h2>Contents</h2>
 <ul>
   <li><a href=".well-known/duckdb-extension-repo.json"><code>.well-known/duckdb-extension-repo.json</code></a>: the repository's metadata, with its url and signing key.</li>
-  <li><a href="v2.0.1/osx_arm64/container.duckdb_extension.gz"><code>v2.0.1/osx_arm64/container.duckdb_extension.gz</code></a>: the <code>container</code> extension (containers as external resources: <code>ATTACH TO NEW TEMPORARY EXTERNAL RESOURCE container.postgres AS pg</code>), DuckDB v2.0.1, macOS arm64, built from <a href="https://github.com/carlopi/duckdb-container">carlopi/duckdb-container</a> at a512b8f and signed with this repository's key.</li>
+  <li><a href="v2.0.1/osx_arm64/container.duckdb_extension.gz"><code>v2.0.1/osx_arm64/container.duckdb_extension.gz</code></a>: the <code>container</code> extension (containers as external resources: <code>ATTACH TO NEW TEMPORARY EXTERNAL RESOURCE container.postgres AS pg</code>), DuckDB v2.0.1, macOS arm64, built from <a href="https://github.com/carlopi/duckdb-container">carlopi/duckdb-container</a> at ba32f04 (stamped b0e3ff6110) and signed with this repository's key.</li>
+  <li>Try it (needs Docker, Finch, Colima, OrbStack or Podman on the machine; the three catalogs start in under a minute and go with the session):<pre>CREATE EXTENSION REPOSITORY IF NOT EXISTS carlopi.github.io;
+INSTALL AND LOAD container FROM carlopi.github.io;
+CALL container_engine();                       -- stops here with the reason when no Docker/Finch/Colima/Podman is around
+ATTACH TO NEW TEMPORARY EXTERNAL RESOURCE container.postgres     AS pg;
+ATTACH TO NEW TEMPORARY EXTERNAL RESOURCE container.ducklake     AS lake;
+ATTACH TO NEW TEMPORARY EXTERNAL RESOURCE container.iceberg-rest AS ice;
+FROM duckdb_databases();
+CREATE TABLE pg.orders AS SELECT range AS id, &#x27;customer &#x27; || (range % 7) AS customer, (range * 3.5)::DECIMAL(10,2) AS amount FROM range(1000);
+CREATE TABLE lake.orders AS FROM pg.orders;          -- PostgreSQL -&gt; DuckLake
+CREATE SCHEMA ice.sales;
+CREATE TABLE ice.sales.orders AS FROM lake.orders;   -- DuckLake -&gt; Iceberg REST
+DETACH pg; DETACH lake; DETACH ice;                  -- the containers go with the session</pre></li>
   <li><a href="v2.0.0/osx_arm64/inet.duckdb_extension.gz"><code>v2.0.0/osx_arm64/inet.duckdb_extension.gz</code></a>: the <code>inet</code> extension, DuckDB v2.0.0, macOS arm64, re-signed with this repository's key.</li>
   <li><a href="c323c78907/osx_arm64/inet.duckdb_extension.gz"><code>c323c78907/osx_arm64/inet.duckdb_extension.gz</code></a> and <a href="c323c78907/osx_arm64/autocomplete.duckdb_extension.gz"><code>c323c78907/osx_arm64/autocomplete.duckdb_extension.gz</code></a>: and <a href="c323c78907/osx_arm64/httpfs.duckdb_extension.gz"><code>c323c78907/osx_arm64/httpfs.duckdb_extension.gz</code></a>: <code>inet</code>, <code>autocomplete</code> and <code>httpfs</code> built for the development build <code>c323c78907</code> of the branch that implements this, macOS arm64, signed with this repository's key.</li>
   <li><a href="https://github.com/carlopi/example-duckdb-extension-repository/blob/main/scripts/sign-extension.sh"><code>scripts/sign-extension.sh</code></a>: signs an extension and places it in the layout above.</li>
