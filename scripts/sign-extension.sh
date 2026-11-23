@@ -1,13 +1,18 @@
 #!/bin/bash
 # Sign a DuckDB extension with this repository's key and place it where DuckDB looks for it:
-#   scripts/sign-extension.sh <private key.pem> <extension.duckdb_extension> <duckdb version or source id> <platform>
+#   scripts/sign-extension.sh <private key.pem> <extension.duckdb_extension[.wasm]> <duckdb version or source id> <platform>
 # An already signed extension (e.g. a core build) is re-signed: its old 256-byte signature is replaced.
 # The signature is RSA-2048 PKCS#1 v1.5 over SHA-256 of the SHA-256 digests of the file's 1 MiB segments,
 # exactly what DuckDB verifies at LOAD, and what duckdb/scripts/verify-extension-signing.sh checks.
 set -euo pipefail
 key="$1"; input="$2"; version="$3"; platform="$4"
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
-name="$(basename "$input" .duckdb_extension)"
+# a WebAssembly build keeps its .duckdb_extension.wasm name and is stored uncompressed: GitHub Pages cannot set the
+# Content-Encoding: br header that the core repository serves its brotli files with, and the page CDN compresses anyway
+case "$input" in
+	*.duckdb_extension.wasm) name="$(basename "$input" .duckdb_extension.wasm)"; wasm=1 ;;
+	*) name="$(basename "$input" .duckdb_extension)"; wasm=0 ;;
+esac
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 
 size=$(stat -f%z "$input" 2>/dev/null || stat -c%s "$input")
@@ -26,6 +31,11 @@ openssl pkeyutl -sign -inkey "$key" -in "$work/hash" -pkeyopt digest:sha256 -out
 [ "$(stat -f%z "$work/sig" 2>/dev/null || stat -c%s "$work/sig")" -eq 256 ]
 
 out_dir="$repo_dir/$version/$platform"; mkdir -p "$out_dir"
-cat "$work/unsigned" "$work/sig" > "$out_dir/$name.duckdb_extension"
-gzip -f -9 "$out_dir/$name.duckdb_extension"
-echo "wrote $out_dir/$name.duckdb_extension.gz"
+if [ "$wasm" = 1 ]; then
+	cat "$work/unsigned" "$work/sig" > "$out_dir/$name.duckdb_extension.wasm"
+	echo "wrote $out_dir/$name.duckdb_extension.wasm"
+else
+	cat "$work/unsigned" "$work/sig" > "$out_dir/$name.duckdb_extension"
+	gzip -f -9 "$out_dir/$name.duckdb_extension"
+	echo "wrote $out_dir/$name.duckdb_extension.gz"
+fi

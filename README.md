@@ -4,7 +4,7 @@ A demo DuckDB extension repository, served by GitHub Pages at
 `https://carlopi.github.io/example-duckdb-extension-repository`.
 
 - `.well-known/duckdb-extension-repo.json`: the repository's metadata, with the public key that signs its extensions.
-- `<version>/<platform>/<name>.duckdb_extension.gz`: the extensions, laid out as DuckDB expects: `container` for v2.0.1 (containers as external resources, from github.com/carlopi/duckdb-container, built from branch show-without-engine at ba32f04, stamped b0e3ff6110), `inet` for v2.0.0 and
+- `<version>/<platform>/<name>.duckdb_extension.gz`: the extensions, laid out as DuckDB expects: `container` for v2.0.1 (containers as external resources, from github.com/carlopi/duckdb-container, built from branch show-without-engine at ba32f04, stamped b0e3ff6110), `inet` for v2.0.1 on `wasm_eh` and `wasm_threads` (the core builds, re-signed; stored uncompressed because GitHub Pages cannot set the `Content-Encoding: br` header the core repository uses), `inet` for v2.0.0 and
   `inet`, `autocomplete` and `httpfs` for the development build c323c78907 of the branch implementing `CREATE EXTENSION REPOSITORY <host>`.
 - `scripts/sign-extension.sh`: signs an extension with the repository's private key (kept outside this repo) and
   places it.
