@@ -4,7 +4,7 @@ A demo DuckDB extension repository, served by GitHub Pages at
 `https://carlopi.github.io/example-duckdb-extension-repository`.
 
 - `.well-known/duckdb-extension-repo.json`: the repository's metadata, with the public key that signs its extensions.
-- `<version>/<platform>/<name>.duckdb_extension.gz`: the extensions, laid out as DuckDB expects: `inet` for v2.0.0 and
+- `<version>/<platform>/<name>.duckdb_extension.gz`: the extensions, laid out as DuckDB expects: `container` for v2.0.1 (containers as external resources, from github.com/carlopi/duckdb-container, built at a512b8f), `inet` for v2.0.0 and
   `inet`, `autocomplete` and `httpfs` for the development build c323c78907 of the branch implementing `CREATE EXTENSION REPOSITORY <host>`.
 - `scripts/sign-extension.sh`: signs an extension with the repository's private key (kept outside this repo) and
   places it.
@@ -15,6 +15,11 @@ The host `carlopi.github.io` points DuckDB here from its own `.well-known/duckdb
 CREATE EXTENSION REPOSITORY carlopi.github.io;
 INSTALL inet FROM carlopi.github.io;
 LOAD inet FROM carlopi.github.io;
+
+-- DuckDB v2.0.1 on macOS arm64: containers as external resources
+INSTALL container FROM carlopi.github.io;
+LOAD container FROM carlopi.github.io;
+ATTACH TO NEW TEMPORARY EXTERNAL RESOURCE container.postgres AS pg;
 ```
 
 `.nojekyll` makes GitHub Pages serve the `.well-known` directory.
