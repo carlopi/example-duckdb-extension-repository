@@ -4,7 +4,7 @@
     "branches": [
       "main"
     ],
-    "artifacts": "v2_capi_shim-*",
+    "artifacts": "v2_capi_shim-*-extension-*",
     "token_sha256": "c4bd71c6ac157c6fb08677fd1efb567202e9e9fe9f29cd99a1208618b71f7c5e"
   }
 }

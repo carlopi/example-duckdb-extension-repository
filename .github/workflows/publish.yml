@@ -6,8 +6,8 @@
 # and this workflow takes that run's artifacts, if the producer is listed in sources.json, the token matches, and the
 # run succeeded on one of its branches; checks each extension's footer; signs it with this repository's key (EXTENSION_REPO_SIGNING_KEY,
 # whose public key is in .well-known/duckdb-extension-repo.json, never leaves this repository); places it at
-# <version dir>/<platform>/<name>.duckdb_extension.gz as its artifact's target.txt says; commits to main, which GitHub
-# Pages serves. Each artifact holds <name>.duckdb_extension and target.txt: version dir, platform, DuckDB commit.
+# <version dir>/<platform>/<name>.duckdb_extension.gz, both read from the extension's own footer (the DuckDB version it
+# was built for, which is the directory INSTALL looks in, and its platform); commits to main, which GitHub Pages serves.
 name: publish
 
 on:
@@ -107,27 +107,25 @@ jobs:
           git config user.name "extension repository CI"
           git config user.email "extension-repository-ci@users.noreply.github.com"
           placed=""
-          for d in built/*/; do
-            dir=$(sed -n 1p "$d/target.txt"); platform=$(sed -n 2p "$d/target.txt")
-            for v in "$dir" "$platform"; do
-              case "$v" in ''|*[!A-Za-z0-9._-]*) echo "bad target.txt in $d: '$v'" >&2; exit 1 ;; esac
-            done
-            for ext in "$d"/*.duckdb_extension; do
-              # a DuckDB extension footer (512 bytes: metadata, then the signature this replaces)
-              python3 - "$ext" "$platform" <<'PY'
+          for ext in built/*/*.duckdb_extension; do
+            # where it goes, from its own footer (512 bytes: 8 fields of 32, then the signature this replaces):
+            # field 5 is the DuckDB version it was built for (INSTALL's version directory), 6 its platform, 7 the magic
+            read -r dir platform <<< "$(python3 - "$ext" <<'PY'
           import sys
           b = open(sys.argv[1], "rb").read()
-          footer = b[-512:-256]
-          fields = [footer[i:i + 32].rstrip(b"\0").decode("latin1") for i in range(0, 256, 32)]
-          if len(b) < 512 or fields[0] != "4":
+          f = [b[-512:-256][i:i + 32].rstrip(b"\0").decode("latin1") for i in range(0, 256, 32)]
+          if len(b) < 512 or f[7] != "4":
               sys.exit("%s has no DuckDB extension footer" % sys.argv[1])
-          if sys.argv[2] not in fields:
-              sys.exit("%s: its footer does not say platform %s (%s)" % (sys.argv[1], sys.argv[2], fields))
+          print(f[5], f[6])
           PY
-              RESIGN=1 scripts/sign-extension.sh "$key" "$ext" "$dir" "$platform"
-              placed="$placed $(basename "$ext" .duckdb_extension)@$dir/$platform"
+          )"
+            for v in "$dir" "$platform"; do
+              case "$v" in ''|*[!A-Za-z0-9._-]*) echo "bad footer in $ext: '$v'" >&2; exit 1 ;; esac
             done
+            RESIGN=1 scripts/sign-extension.sh "$key" "$ext" "$dir" "$platform"
+            placed="$placed $(basename "$ext" .duckdb_extension)@$dir/$platform"
           done
+          [ -n "$placed" ] || { echo "no extensions in the run's artifacts" >&2; exit 1; }
           git add -A -- ':!built'
           if git diff --cached --quiet; then echo "nothing changed"; exit 0; fi
           git commit -q -m "publish from $REPO run $RUN:$placed"
