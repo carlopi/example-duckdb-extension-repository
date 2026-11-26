@@ -1,0 +1,138 @@
+# Publishes extensions built elsewhere: a producer's CI sends
+#   POST /repos/carlopi/example-duckdb-extension-repository/dispatches
+#   {"event_type": "publish-extensions", "client_payload": {"repository": "<owner/name>", "run_id": <id>}}
+#   (plus "token": the producer's own publish token, whose SHA-256 sources.json lists next to it; unique per producer,
+#   revoked by editing that line)
+# and this workflow takes that run's artifacts, if the producer is listed in sources.json, the token matches, and the
+# run succeeded on one of its branches; checks each extension's footer; signs it with this repository's key (EXTENSION_REPO_SIGNING_KEY,
+# whose public key is in .well-known/duckdb-extension-repo.json, never leaves this repository); places it at
+# <version dir>/<platform>/<name>.duckdb_extension.gz as its artifact's target.txt says; commits to main, which GitHub
+# Pages serves. Each artifact holds <name>.duckdb_extension and target.txt: version dir, platform, DuckDB commit.
+name: publish
+
+on:
+  repository_dispatch:
+    types: [publish-extensions]
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: "producer repository (owner/name), listed in sources.json"
+        required: true
+      run_id:
+        description: "the producer's workflow run id"
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Which run, and is it allowed
+        id: source
+        env:
+          REPO: ${{ github.event.client_payload.repository || github.event.inputs.repository }}
+          RUN: ${{ github.event.client_payload.run_id || github.event.inputs.run_id }}
+          # a dispatch must carry the producer's token; a manual run is by someone with write access here already
+          TOKEN: ${{ github.event.client_payload.token }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          [ -z "$TOKEN" ] || echo "::add-mask::$TOKEN"
+          case "$REPO" in */*) ;; *) echo "repository must be owner/name: $REPO" >&2; exit 1 ;; esac
+          case "$REPO" in *[!A-Za-z0-9._/-]*) echo "invalid repository: $REPO" >&2; exit 1 ;; esac
+          case "$RUN" in ''|*[!0-9]*) echo "invalid run id: $RUN" >&2; exit 1 ;; esac
+          python3 - "$REPO" <<'PY' >> "$GITHUB_OUTPUT"
+          import json, sys
+          sources = json.load(open("sources.json"))
+          repo = sys.argv[1]
+          if repo not in sources or repo.startswith("_"):
+              sys.exit("not a listed producer: %s (see sources.json)" % repo)
+          s = sources[repo]
+          import hashlib, hmac, os
+          if os.environ["EVENT"] == "repository_dispatch":
+              given = hashlib.sha256(os.environ.get("TOKEN", "").encode()).hexdigest()
+              if not os.environ.get("TOKEN") or not hmac.compare_digest(given, s.get("token_sha256", "")):
+                  sys.exit("the dispatch does not carry %s's publish token" % repo)
+          print("artifacts=%s" % s["artifacts"])
+          print("branches=%s" % " ".join(s["branches"]))
+          PY
+          echo "repository=$REPO" >> "$GITHUB_OUTPUT"
+          echo "run_id=$RUN" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the run to finish; it must have succeeded on an allowed branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ steps.source.outputs.repository }}
+          RUN: ${{ steps.source.outputs.run_id }}
+          BRANCHES: ${{ steps.source.outputs.branches }}
+        run: |
+          for i in $(seq 1 240); do
+            status=$(gh api "repos/$REPO/actions/runs/$RUN" --jq .status)
+            [ "$status" = completed ] && break
+            sleep 30
+          done
+          read -r conclusion branch event <<< "$(gh api "repos/$REPO/actions/runs/$RUN" --jq '"\(.conclusion) \(.head_branch) \(.event)"')"
+          echo "run $RUN of $REPO: $status, $conclusion, branch $branch, event $event"
+          [ "$conclusion" = success ] || { echo "the run did not succeed" >&2; exit 1; }
+          [ "$event" != pull_request ] || { echo "pull request runs are not published" >&2; exit 1; }
+          case " $BRANCHES " in *" $branch "*) ;; *) echo "branch $branch is not allowed for $REPO" >&2; exit 1 ;; esac
+
+      - uses: actions/download-artifact@v4
+        with:
+          repository: ${{ steps.source.outputs.repository }}
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ github.token }}
+          pattern: ${{ steps.source.outputs.artifacts }}
+          path: built
+
+      - name: Check, sign, place, commit, push
+        env:
+          KEY: ${{ secrets.EXTENSION_REPO_SIGNING_KEY }}
+          REPO: ${{ steps.source.outputs.repository }}
+          RUN: ${{ steps.source.outputs.run_id }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::EXTENSION_REPO_SIGNING_KEY is not set"; exit 1; }
+          umask 077
+          key="$RUNNER_TEMP/signing-key.pem"
+          printf '%s\n' "$KEY" > "$key"
+          trap 'rm -f "$key"' EXIT
+          git config user.name "extension repository CI"
+          git config user.email "extension-repository-ci@users.noreply.github.com"
+          placed=""
+          for d in built/*/; do
+            dir=$(sed -n 1p "$d/target.txt"); platform=$(sed -n 2p "$d/target.txt")
+            for v in "$dir" "$platform"; do
+              case "$v" in ''|*[!A-Za-z0-9._-]*) echo "bad target.txt in $d: '$v'" >&2; exit 1 ;; esac
+            done
+            for ext in "$d"/*.duckdb_extension; do
+              # a DuckDB extension footer (512 bytes: metadata, then the signature this replaces)
+              python3 - "$ext" "$platform" <<'PY'
+          import sys
+          b = open(sys.argv[1], "rb").read()
+          footer = b[-512:-256]
+          fields = [footer[i:i + 32].rstrip(b"\0").decode("latin1") for i in range(0, 256, 32)]
+          if len(b) < 512 or fields[0] != "4":
+              sys.exit("%s has no DuckDB extension footer" % sys.argv[1])
+          if sys.argv[2] not in fields:
+              sys.exit("%s: its footer does not say platform %s (%s)" % (sys.argv[1], sys.argv[2], fields))
+          PY
+              RESIGN=1 scripts/sign-extension.sh "$key" "$ext" "$dir" "$platform"
+              placed="$placed $(basename "$ext" .duckdb_extension)@$dir/$platform"
+            done
+          done
+          git add -A -- ':!built'
+          if git diff --cached --quiet; then echo "nothing changed"; exit 0; fi
+          git commit -q -m "publish from $REPO run $RUN:$placed"
+          for attempt in 1 2 3 4 5; do
+            git push -q origin HEAD:main && exit 0
+            git pull -q --rebase origin main
+          done
+          exit 1

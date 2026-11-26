@@ -32,3 +32,12 @@ DETACH pg; DETACH lake; DETACH ice;                  -- the containers go with t
 ```
 
 `.nojekyll` makes GitHub Pages serve the `.well-known` directory.
+
+## Publishing from other repositories' CI
+
+`.github/workflows/publish.yml` publishes builds made elsewhere. A producer's CI sends a `repository_dispatch`
+(`publish-extensions`, payload `{repository, run_id, token}`); this repository takes that run's artifacts only if the
+producer is listed in `sources.json`, the token's SHA-256 matches the one listed there, and the run succeeded on an
+allowed branch; it checks each footer, signs with its own key (secret `EXTENSION_REPO_SIGNING_KEY`, never anywhere
+else), places them at `<version dir>/<platform>/<name>.duckdb_extension.gz` and commits to `main`. Producers so far:
+`carlopi/duckdb-v2_capi_shim` (`v2_capi_shim`). A producer is added, or its token rotated, by editing `sources.json`.
