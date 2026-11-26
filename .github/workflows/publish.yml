@@ -126,7 +126,7 @@ jobs:
             placed="$placed $(basename "$ext" .duckdb_extension)@$dir/$platform"
           done
           [ -n "$placed" ] || { echo "no extensions in the run's artifacts" >&2; exit 1; }
-          git add -A -- ':!built'
+          git add -A
           if git diff --cached --quiet; then echo "nothing changed"; exit 0; fi
           git commit -q -m "publish from $REPO run $RUN:$placed"
           for attempt in 1 2 3 4 5; do
